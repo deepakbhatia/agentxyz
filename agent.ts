@@ -1,7 +1,8 @@
 import {Contract, ethers, TransactionReceipt, Wallet} from "ethers";
 import ABI from "./abis/Test1Agent.json";
 
-import {StoryTasks, getUserInput, parseUserInput, furtherActions} from './Inputparser';
+import {StoryTasks, getUserInput, parseUserInput, furtherActions, parseFollowUp} from "./Inputparser";
+import { getFollowUpSystemPrompt } from "./system_questions";
 require("dotenv").config()
 
 interface Message {
@@ -11,6 +12,8 @@ interface Message {
 
 interface AgentRunStage {
   stage: StoryTasks,
+  completed: number,
+  total: number
 }
 
 let agentRunStage: {[id: number]: AgentRunStage} = {}
@@ -42,8 +45,10 @@ async function main() {
   let choice =parseUserInput(queryLCase)
 
 
-let updatedQuery = await furtherActions(choice)
+let queryState = await furtherActions(choice)
 
+let updatedQuery = queryState['query']
+let currentState = queryState['stage']
 //   if(choice === 1) {
 //     const genre = await getUserInput('Which genre would you like?')
 //     const location = await getUserInput('Which city, town or neighbourhood should it be based')
@@ -70,33 +75,56 @@ let updatedQuery = await furtherActions(choice)
     return
   }
 
-  let
+  agentRunStage[agentRunID] = {
+    stage: currentState,
+    completed: 0,
+    total: maxIterations ? +maxIterations:1
+  }
+  
   let allMessages: Message[] = []
   // Run the chat loop: read messages and send messages
   var exitNextLoop = false;
   while (true) {
     const newMessages: Message[] = await getNewMessages(contract, agentRunID, allMessages.length);
-    if (newMessages) {
+    if (newMessages && newMessages.length >0 ) {
       for (let message of newMessages) {
         let roleDisplay = message.role === 'assistant' ? 'THOUGHT' : 'STEP';
         let color = message.role === 'assistant' ? '\x1b[36m' : '\x1b[33m'; // Cyan for thought, yellow for step
         console.log(`${color}${roleDisplay}\x1b[0m: ${message.content}`);
         allMessages.push(message)
       }
+
+      console.log(agentRunStage[agentRunID])
+      agentRunStage[agentRunID].completed++;
+
+      const yesOrNo = await getUserInput(whatShouldAgentDoNext(agentRunStage[agentRunID]))
+      
+       // Call the startChat function
+      const transactionResponse = await contract.runAgent((await parseFollowUp(agentRunStage[agentRunID].stage, yesOrNo)).query, Number(maxIterations));
+      const receipt = await transactionResponse.wait()
+      
     }
     await new Promise(resolve => setTimeout(resolve, 2000))
     if (exitNextLoop){
       console.log(`agent run ID ${agentRunID} finished!`);
       break;
     }
-    if (await contract.isRunFinished(agentRunID)) {
-      exitNextLoop = true;
-    }
+    // if (await contract.isRunFinished(agentRunID)) {
+    //   exitNextLoop = true;
+    // }
+
+    
   }
 
 }
 
+function whatShouldAgentDoNext(status: AgentRunStage): string {
+    if(status.stage){
+      return getFollowUpSystemPrompt(status.stage)
+    }
 
+    return "Let it all burn baby"
+}
 
 function getAgentRunId(receipt: TransactionReceipt, contract: Contract) {
   let agentRunID
