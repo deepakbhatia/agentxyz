@@ -1,7 +1,7 @@
 import {Contract, ethers, TransactionReceipt, Wallet} from "ethers";
-import ABI from "./abis/Agent.json";
-import * as readline from 'readline';
+import ABI from "./abis/Test1Agent.json";
 
+import {StoryTasks, getUserInput, parseUserInput, furtherActions} from './Inputparser';
 require("dotenv").config()
 
 interface Message {
@@ -9,13 +9,11 @@ interface Message {
   content: string,
 }
 
-enum StoryTasks{
-  PLOT=1,
-  CHAPTER,
-  ENDING,
-  GRAPHICS,
-  TITLE
+interface AgentRunStage {
+  stage: StoryTasks,
 }
+
+let agentRunStage: {[id: number]: AgentRunStage} = {}
 
 const startPrompt = "Agent's task:\n" + 
 "1. Create plot lines\n" + 
@@ -38,30 +36,29 @@ async function main() {
   const contract = new Contract(contractAddress, ABI, wallet)
 
   // The query you want to start the agent with
-  const query = await getUserInput("Agent's task:\n1. Get me plot lines\n
-  2. Here is my plot, write a story")
+  const query = await getUserInput(startPrompt)
+
   let queryLCase = query? query.toLowerCase() : '1'
-  let choice = queryLCase?.indexOf('1') >= 0 
-  || queryLCase?.indexOf('plot lines') >= 0 ? 
-  1 : 2;
+  let choice =parseUserInput(queryLCase)
 
-let task = StoryTasks.PLOT
 
-  if(choice === 1) {
-    const genre = await getUserInput('Which genre would you like?')
-    const location = await getUserInput('Which city, town or neighbourhood should it be based')
+let updatedQuery = await furtherActions(choice)
 
-    task = StoryTasks.PLOT
-  }else if(choice === 2) {
-    const genre = await getUserInput('Which genre would you like?')
-    const location = await getUserInput('Which city, town or neighbourhood should it be based')
+//   if(choice === 1) {
+//     const genre = await getUserInput('Which genre would you like?')
+//     const location = await getUserInput('Which city, town or neighbourhood should it be based')
 
-    task = StoryTasks.CHAPTER
-  }
+//     task = StoryTasks.PLOT
+//   }else if(choice === 2) {
+//     const genre = await getUserInput('Which genre would you like?')
+//     const location = await getUserInput('Which city, town or neighbourhood should it be based')
+
+//     task = StoryTasks.CHAPTER
+//   }
   const maxIterations = await getUserInput("Max iterations: ")
 
   // Call the startChat function
-  const transactionResponse = await contract.runAgent(query, Number(maxIterations));
+  const transactionResponse = await contract.runAgent(updatedQuery, Number(maxIterations));
   const receipt = await transactionResponse.wait()
   console.log(`Task sent, tx hash: ${receipt.hash}`)
   console.log(`Agent started with task: "${query}"`)
@@ -73,6 +70,7 @@ let task = StoryTasks.PLOT
     return
   }
 
+  let
   let allMessages: Message[] = []
   // Run the chat loop: read messages and send messages
   var exitNextLoop = false;
@@ -98,29 +96,6 @@ let task = StoryTasks.PLOT
 
 }
 
-async function getUserInput(query: string): Promise<string | undefined> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  })
-
-  const question = (query: string): Promise<string> => {
-    return new Promise((resolve) => {
-      rl.question(query, (answer) => {
-        resolve(answer)
-      })
-    })
-  }
-
-  try {
-    const input = await question(query)
-    rl.close()
-    return input
-  } catch (err) {
-    console.error('Error getting user input:', err)
-    rl.close()
-  }
-}
 
 
 function getAgentRunId(receipt: TransactionReceipt, contract: Contract) {
