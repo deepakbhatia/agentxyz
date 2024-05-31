@@ -24,12 +24,12 @@ export function buildPlotPrompt(request: PlotPromptRequest): string {
         plotPrompt = plotPrompt + " based in " + city
     }
 
-    plotPrompt = plotPrompt + " "
+    plotPrompt = plotPrompt + " each with a short title " +"\n\n"
     return plotPrompt;
 }
 
 export function buildChapterPrompt(request: ChapterPromptRequest) {
-
+    //request.
 }
 
 export function buildEndingPrompt(request: PlotPromptRequest) {
