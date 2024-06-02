@@ -5,7 +5,7 @@ pragma solidity ^0.8.9;
 // import "hardhat/console.sol";
 import "./interfaces/IOracle.sol";
 
-contract Test2Agent {
+contract WriterAgent {
 
     string public prompt;
 
@@ -54,7 +54,7 @@ contract Test2Agent {
             temperature : 10, // Example temperature (scaled up, 10 means 1.0), > 20 means null
             topP : 101, // Percentage 0-100, > 100 means null
             tools : "[{\"type\":\"function\",\"function\":{\"name\":\"web_search\",\"description\":\"Search the internet\",\"parameters\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"required\":[\"query\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"image_generation\",\"description\":\"Generates an image using Dalle-2\",\"parameters\":{\"type\":\"object\",\"properties\":{\"prompt\":{\"type\":\"string\",\"description\":\"Dalle-2 prompt to generate an image\"}},\"required\":[\"prompt\"]}}}]",
-            toolChoice : "none", // "none" or "auto"
+            toolChoice : "auto", // "none" or "auto"
             user : "" // null
         });
     }

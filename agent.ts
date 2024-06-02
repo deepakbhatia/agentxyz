@@ -1,5 +1,5 @@
 import {Contract, ethers, TransactionReceipt, Wallet} from "ethers";
-import ABI from "./abis/Test1Agent.json";
+import ABI from "./abis/Test8Agent.json";
 
 import {StoryTasks, getUserInput, parseUserInput, furtherActions, parseFollowUp} from "./Inputparser";
 import { getFollowUpSystemPrompt } from "./system_questions";
@@ -19,11 +19,8 @@ interface AgentRunStage {
 let agentRunStage: {[id: number]: AgentRunStage} = {}
 
 const startPrompt = "Agent's task:\n" + 
-"1. Create plot lines\n" + 
-"2. Write me chapters for the plot line\n" + 
-"3. Create graphics for chapter\n" +
-"4. Create cover page graphic\n" +
-"5. Create titles for the story\n"
+"1. Create plot lines\n\n" 
+
 async function main() {
   const rpcUrl = process.env.RPC_URL
   if (!rpcUrl) throw Error("Missing RPC_URL in .env")
@@ -49,17 +46,6 @@ let queryState = await furtherActions(choice)
 
 let updatedQuery = queryState['query']
 let currentState = queryState['stage']
-//   if(choice === 1) {
-//     const genre = await getUserInput('Which genre would you like?')
-//     const location = await getUserInput('Which city, town or neighbourhood should it be based')
-
-//     task = StoryTasks.PLOT
-//   }else if(choice === 2) {
-//     const genre = await getUserInput('Which genre would you like?')
-//     const location = await getUserInput('Which city, town or neighbourhood should it be based')
-
-//     task = StoryTasks.CHAPTER
-//   }
   const maxIterations = await getUserInput("Max iterations: ")
 
   // Call the startChat function
@@ -86,44 +72,76 @@ let currentState = queryState['stage']
   var exitNextLoop = false;
   while (true) {
     const newMessages: Message[] = await getNewMessages(contract, agentRunID, allMessages.length);
+    
     if (newMessages && newMessages.length >0 ) {
+
+      let completed =  false
+
       for (let message of newMessages) {
-        let roleDisplay = message.role === 'assistant' ? 'THOUGHT' : 'STEP';
+        
+        let roleDisplay = message.role === 'assistant' ? 'AI RESPONSE' : 'CUSTOMER INPUT';
         let color = message.role === 'assistant' ? '\x1b[36m' : '\x1b[33m'; // Cyan for thought, yellow for step
-        console.log(`${color}${roleDisplay}\x1b[0m: ${message.content}`);
+        
+        if(message.role === 'assistant'){
+          console.log(`${color}${roleDisplay}\x1b\x1b[0m: ${message.content}`);
+        }
+        
         allMessages.push(message)
+
+        if(message.role === 'assistant'){
+          completed = true
+        }
+        
       }
 
-      console.log(agentRunStage[agentRunID])
-      agentRunStage[agentRunID].completed++;
+      if(completed === true){
+        agentRunStage[agentRunID].completed++;
+        
+        let inputForAiAvail:boolean = false
+        let inputForAi: string = "End this agent run"
+        while(!inputForAiAvail){
 
-      const yesOrNo = await getUserInput(whatShouldAgentDoNext(agentRunStage[agentRunID]))
-      
-       // Call the startChat function
-      const transactionResponse = await contract.runAgent((await parseFollowUp(agentRunStage[agentRunID].stage, yesOrNo)).query, Number(maxIterations));
-      const receipt = await transactionResponse.wait()
+          const nextAction = whatShouldAgentDoNext(agentRunStage[agentRunID])
+
+          if(nextAction === undefined){
+            exitNextLoop = true;
+            break;
+          }
+          const yesOrNo = await getUserInput(nextAction)
+          
+          let response = await parseFollowUp(agentRunStage[agentRunID].stage, yesOrNo)
+
+          agentRunStage[agentRunID].stage = response.stage
+
+          if (response.query != undefined) {
+            inputForAi = response.query;
+            inputForAiAvail=true
+          }
+        }
+
+        if (exitNextLoop){
+          console.log(`agent run ID ${agentRunID} finished!`);
+          break;
+        }
+         // Call the startChat function
+         const transactionResponse = await contract.continueAgent(inputForAi, agentRunID);
+         const receipt = await transactionResponse.wait()
+        
+      }      
       
     }
     await new Promise(resolve => setTimeout(resolve, 2000))
-    if (exitNextLoop){
-      console.log(`agent run ID ${agentRunID} finished!`);
-      break;
-    }
-    // if (await contract.isRunFinished(agentRunID)) {
-    //   exitNextLoop = true;
-    // }
-
-    
+  
   }
 
 }
 
-function whatShouldAgentDoNext(status: AgentRunStage): string {
-    if(status.stage){
+function whatShouldAgentDoNext(status: AgentRunStage): string |undefined {
+    if(status.stage < 2){
       return getFollowUpSystemPrompt(status.stage)
     }
 
-    return "Let it all burn baby"
+    return undefined
 }
 
 function getAgentRunId(receipt: TransactionReceipt, contract: Contract) {
@@ -131,7 +149,7 @@ function getAgentRunId(receipt: TransactionReceipt, contract: Contract) {
   for (const log of receipt.logs) {
     try {
       const parsedLog = contract.interface.parseLog(log)
-      if (parsedLog && parsedLog.name === "AgentRunCreated") {
+      if (parsedLog && parsedLog.name === ("AgentRunCreated" || "FunctionCallExecuted")) {
         // Second event argument
         agentRunID = ethers.toNumber(parsedLog.args[1])
       }
